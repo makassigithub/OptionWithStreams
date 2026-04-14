@@ -1,7 +1,12 @@
 package org.makassi;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 //TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
 // click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
@@ -140,5 +145,120 @@ public class Main {
         Optional<String> config = Provider.getFromEnv()
                 .or(Provider::getFromFile)
                 .or(() -> Optional.of("default"));
+
+        /*
+        5. Optional with Streams
+            Optional and Stream integrate naturally. The most important bridge method is optional.stream() (Java
+            9+), which converts an Optional into a Stream of 0 or 1 element.
+        */
+
+        //5.1 optional.stream() — the key bridge
+        Optional<String> hello = Optional.of("hello");
+        Stream<String> stream = hello.stream();
+
+        Optional<String> empty2 = Optional.empty();
+        Stream<String> stream2 = empty2.stream();
+
+        //5.2 Flatten a Stream of Optionals
+       List<Optional<String>> optionals  = List.of(
+               Optional.of("Alice"),
+               Optional.empty(),
+               Optional.of("Bob"),
+               Optional.empty(),
+               Optional.of("Charlie")
+        );
+
+        List<String> names = optionals
+                .stream()
+                .flatMap(Optional::stream).toList(); // Java 9+ — cleanest approach with flatMap + Optional::stream
+
+        System.out.println(names);
+        List<String> names2 = optionals
+                .stream()
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .toList(); // Java 8 — filter + map (more verbose)
+        System.out.println(names2);
+
+        // 5.3 Stream operations that return Optional
+        //Many terminal Stream operations return Optional to handle the case where the stream is empty:
+        List<Integer> numbers = List.of(3, 1, 4, 1, 5, 9, 2, 6);
+        // findFirst():Optional<T> - findAny():Optional<T>
+        Optional<Integer> firstEven = numbers.stream().filter(n -> n % 2 == 0).findFirst();
+        System.out.println(firstEven);
+        Optional<Integer> anyEven = numbers.stream().filter(n -> n % 2 ==0 ).findAny();
+        System.out.println(anyEven);
+
+        Optional<Integer> max = numbers.stream().max(Integer::compareTo);
+        Optional<Integer> min = numbers.stream().min(Integer::compareTo);
+        System.out.println(max); // Optional[9]
+        System.out.println(min.get()); // 1
+
+        // reduce() — Optional<T> (single-arg version)
+        Optional<Integer> sum = numbers.stream().reduce(Integer::sum);
+        System.out.println(sum); // Optional[31]
+        // On an empty stream — all return Optional.empty()
+        Optional<Integer> none = Stream.<Integer>empty().findFirst();
+        System.out.println(none); // Optional.empty
+
+        //5.4 Chaining Stream result with Optional methods
+        // Find first name starting with 'A', uppercase it, or use default
+        List<String> names3 = List.of("Alice", "Bob", "Charlie", "Aissata");
+        String firstWithA = names3.stream().filter(n -> n.toLowerCase().contains("a"))
+                .findFirst()
+                .map(String::toUpperCase)
+                .orElse("No such value");
+        System.out.println(firstWithA);
+        // Find longest name or throw
+        String longest = names3.stream()
+                .max(Comparator.comparingInt(String::length)) // Optional<String>
+                .orElseThrow(() -> new RuntimeException("Empty list!"));
+        System.out.println(longest); // Charlie
+
+        //5.5 Collecting to Optional
+        // Collectors.maxBy / minBy return Optional
+        List<String> fruits = List.of("apple","banana","fig","kiwi");
+
+        Optional<String> longest2 = fruits.stream()
+                .max(Comparator.comparingInt(String::length));
+        System.out.println(longest2); // Optional[banana]
+
+        // reducing() collector also returns Optional
+        Optional<String> concat = fruits.stream()
+                .reduce((a, b) -> a + "," + b);
+        System.out.println(concat); // Optional[apple,banana,fig,kiwi]
+
+         //6. Antippatterns
+        /* ■ Anti-pattern 1 — isPresent() + get()
+            if (optional.isPresent()) {
+                System.out.println(optional.get());
+                Why it's bad Fix
+                optional.get() without check Throws NoSuchElementException if empty Use orElseThrow() or orElse()
+                as method parameter Forces callers to wrap values unnecessarily Use @Nullable or overloading instead
+                as field type Not serializable, adds overhead Use null + @Nullable annotation
+                isPresent() + get() patternVerbose, misses the point of Optional Use map/orElse/ifPresent instead
+                null in Optional.of() NullPointerException immediately Use Optional.ofNullable()
+                Returning Optional.of(null)Defeats the purpose entirely Return Optional.empty()
+            }
+            // ■ Fix
+            optional.ifPresent(System.out::println);
+        */
+        /* Anti-pattern 2 — Optional as parameter
+            void process(Optional<String> name) { ... }
+        /* ■ Fix
+            void process(String name) { ... } // let caller handle null
+         */
+
+        /* ■ Anti-pattern 3 — nested null check style
+            Optional<String> opt = findName();
+            String result = null;
+            if (opt.isPresent()) {
+                result = opt.get().toUpperCase();
+            } else {
+                result = "default";
+            }
+            // ■ Fix — one clean chain
+            String result = findName().map(String::toUpperCase).orElse("default");
+         */
     }
 }
